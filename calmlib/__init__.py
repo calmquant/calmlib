@@ -1,5 +1,6 @@
 from .execution import run_cmd
 from pandas import Timestamp, Timedelta
+from .unsorted import fix_path
 from .read_write import load, dump, load_json, dump_json, load_pickle, dump_pickle
 
 
