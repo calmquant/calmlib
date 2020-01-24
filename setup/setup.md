@@ -12,4 +12,5 @@ flask
 protobuf
 
 oneline:
-conda install -с conda-forge seaborn scikit-learn pillow sqlite tinydb jupyter jupyter_contrib_nbextensions flask protobuf 
+
+conda install -c conda-forge seaborn scikit-learn pillow sqlite tinydb jupyter flask protobuf python-telegram-bot aiogram jupyter_contrib_nbextensions

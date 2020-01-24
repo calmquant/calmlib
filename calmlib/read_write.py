@@ -52,5 +52,5 @@ def load(path: Path):
             return load_handler(path)
 
 
-# if __name__ == '__main__':
-
+def get_token(path):
+    return Path(path).read_text()
