@@ -1,18 +1,19 @@
 import datetime
 import os
+import sys
 import time
+import unicodedata
 from pathlib import Path
 from types import SimpleNamespace
-from typing import NamedTuple
 
 import dropbox
-import sys
-
 import six
-import unicodedata
 
+from calmlib import get_personal_logger
 from calmlib.autocast import autocast_args
 from calmlib.found_on_the_web import stopwatch
+
+logger = get_personal_logger(__name__)
 
 
 def list_folder(dbx, folder, subfolder):
@@ -28,7 +29,7 @@ def list_folder(dbx, folder, subfolder):
         with stopwatch('list_folder'):
             res = dbx.files_list_folder(path)
     except dropbox.exceptions.ApiError as err:
-        print('Folder listing failed for', path, '-- assumed empty:', err)
+        logger.debug(f'Folder listing failed for {path} -- assumed empty: {err}')
         return {}
     else:
         rv = {}
@@ -48,10 +49,10 @@ def download(dbx, folder, subfolder, name):
         try:
             md, res = dbx.files_download(path)
         except dropbox.exceptions.HttpError as err:
-            print('*** HTTP error', err)
+            logger.error(f'*** HTTP error {err}')
             return None
     data = res.content
-    print(len(data), 'bytes; md:', md)
+    logger.debug(f'{len(data)} bytes; md: {md}')
     return data
 
 
@@ -75,9 +76,9 @@ def upload(dbx, fullname, folder, subfolder, name, overwrite=False):
                 client_modified=datetime.datetime(*time.gmtime(mtime)[:6]),
                 mute=True)
         except dropbox.exceptions.ApiError as err:
-            print('*** API error', err)
+            logger.error(f'*** API error {err}')
             return None
-    print('uploaded as', res.name.encode('utf8'))
+    logger.debug(f"uploaded as {res.name.encode('utf8')}")
     return res
 
 
@@ -93,13 +94,13 @@ def yesno(message, default, args):
     - p or pdb invokes the debugger
     """
     if args.default:
-        print(message + '? [auto]', 'Y' if default else 'N')
+        logger.debug(message + '? [auto]' + ('Y' if default else 'N'))
         return default
     if args.yes:
-        print(message + '? [auto] YES')
+        logger.debug(message + '? [auto] YES')
         return True
     if args.no:
-        print(message + '? [auto] NO')
+        logger.debug(message + '? [auto] NO')
         return False
     if default:
         message += '? [Y/n] '
@@ -114,12 +115,35 @@ def yesno(message, default, args):
         if answer in ('n', 'no'):
             return False
         if answer in ('q', 'quit'):
-            print('Exit')
+            logger.debug('Exit')
             raise SystemExit(0)
         if answer in ('p', 'pdb'):
             import pdb
             pdb.set_trace()
-        print('Please answer YES or NO.')
+        logger.debug('Please answer YES or NO.')
+
+
+@autocast_args
+def download_and_save(dbx, md, subpath: Path):
+    """
+    :param dbx: dropbox.Dropbox object
+    :param md: metadata from dropbox
+    :param subpath: - path on disk where data is to be saved
+    :return:
+    """
+    # if md is dir - run recurrently
+    if isinstance(md, dropbox.files.FolderMetadata):
+        os.makedirs(subpath, exist_ok=True)
+        listing = list_folder(dbx, '', md.path_display)
+        for k, v in listing.items():
+            download_and_save(dbx, v, subpath / k)
+    # if md is file
+    elif isinstance(md, dropbox.files.FileMetadata):
+        data = download(dbx, '', '', md.path_display)
+        with open(subpath, 'wb') as f:
+            f.write(data)
+    else:
+        raise TypeError(f"Unknown dropbox listing type: {type(md)}")
 
 
 class DropboxSharedFolder:
@@ -137,20 +161,19 @@ class DropboxSharedFolder:
     def sync(self, ask_confirmation=False):
         """
         Uploads all updated files to the dropbox.
-        todo: download all missing/changed files as well.
         :param ask_confirmation:
         :return:
         """
 
         folder = self.subpath
         rootdir = self.path
-        # print('Dropbox folder name:', folder)
-        # print('Local directory:', rootdir)
+        # logger.debug('Dropbox folder name:', folder)
+        # logger.debug('Local directory:', rootdir)
         if not rootdir.exists():
-            print(rootdir, 'does not exist on your filesystem')
+            logger.debug(f'{rootdir} does not exist on your filesystem')
             sys.exit(1)
         elif not rootdir.is_dir():
-            print(rootdir, 'is not a folder on your filesystem')
+            logger.debug(f'{rootdir} is not a folder on your filesystem')
             sys.exit(1)
 
         args = SimpleNamespace(default=not ask_confirmation)
@@ -160,7 +183,7 @@ class DropboxSharedFolder:
         for dn, dirs, files in os.walk(rootdir):
             subfolder = dn[len(str(rootdir)):].strip(os.path.sep)
             listing = list_folder(dbx, folder, subfolder)
-            print('Descending into', subfolder, '...')
+            logger.debug(f'Descending into {subfolder}...')
 
             # First do all the files.
             for name in files:
@@ -169,31 +192,35 @@ class DropboxSharedFolder:
                     name = name.decode('utf-8')
                 nname = unicodedata.normalize('NFC', name)
                 if name.startswith('.'):
-                    print('Skipping dot file:', name)
+                    logger.debug(f'Skipping dot file: {name}')
                 elif name.startswith('@') or name.endswith('~'):
-                    print('Skipping temporary file:', name)
+                    logger.debug(f'Skipping temporary file: {name}')
                 elif name.endswith('.pyc') or name.endswith('.pyo'):
-                    print('Skipping generated file:', name)
+                    logger.debug(f'Skipping generated file: {name}')
                 elif nname in listing:
                     md = listing[nname]
+                    md.processed = True
                     mtime = os.path.getmtime(fullname)
                     mtime_dt = datetime.datetime(*time.gmtime(mtime)[:6])
                     size = os.path.getsize(fullname)
                     if (isinstance(md, dropbox.files.FileMetadata) and
                             mtime_dt == md.client_modified and size == md.size):
-                        print(name, 'is already synced [stats match]')
+                        logger.debug(f'{name} is already synced [stats match]')
                     else:
-                        print(name, 'exists with different stats, downloading')
+                        logger.debug(f'{name} exists with different stats, downloading')
                         res = download(dbx, folder, subfolder, name)
                         with open(fullname) as f:
                             data = f.read()
                         if res == data:
-                            print(name, 'is already synced [content match]')
+                            logger.debug(f'{name} is already synced [content match]')
                         else:
-                            print(name, 'has changed since last sync')
-                            if yesno('Refresh %s' % name, False, args):
+                            logger.debug(f'{name} has changed since last sync')
+                            if mtime_dt > md.client_modified:
                                 upload(dbx, fullname, folder, subfolder, name,
                                        overwrite=True)
+                            else:
+                                download_and_save(dbx, md, os.path.join(dn, md.name))
+
                 elif yesno('Upload %s' % name, True, args):
                     upload(dbx, fullname, folder, subfolder, name)
 
@@ -201,14 +228,23 @@ class DropboxSharedFolder:
             keep = []
             for name in dirs:
                 if name.startswith('.'):
-                    print('Skipping dot directory:', name)
+                    logger.debug(f'Skipping dot directory: {name}')
                 elif name.startswith('@') or name.endswith('~'):
-                    print('Skipping temporary directory:', name)
+                    logger.debug(f'Skipping temporary directory: {name}')
                 elif name == '__pycache__':
-                    print('Skipping generated directory:', name)
+                    logger.debug(f'Skipping generated directory: {name}')
                 elif yesno('Descend into %s' % name, True, args):
-                    print('Keeping directory:', name)
+                    logger.debug(f'Keeping directory: {name}')
                     keep.append(name)
                 else:
-                    print('OK, skipping directory:', name)
+                    logger.debug(f'OK, skipping directory: {name}')
+                nname = unicodedata.normalize('NFC', name)
+                if nname in listing:
+                    listing[nname].processed = True
             dirs[:] = keep
+
+            # download all other files
+            for md in listing.values():
+                if hasattr(md, 'processed'):
+                    continue
+                download_and_save(dbx, md, os.path.join(dn, md.name))
