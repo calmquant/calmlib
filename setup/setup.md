@@ -11,6 +11,16 @@ tinydb
 flask
 protobuf
 
+telegram
+dropbox
+python-telegram-bot
+ 
+ 
+pandas-profiling
+django
+plotly
+
 oneline:
 
-conda install -c conda-forge seaborn scikit-learn pillow sqlite tinydb jupyter flask protobuf python-telegram-bot aiogram jupyter_contrib_nbextensions
+conda install -c conda-forge seaborn scikit-learn pillow sqlite tinydb jupyter jupyter_contrib_nbextensions flask protobuf python-telegram-bot aiogram dropbox pandas-profiling plotly django
+pip install dataclasses-json
