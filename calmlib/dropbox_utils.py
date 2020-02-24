@@ -156,6 +156,7 @@ class DropboxSharedFolder:
         """
         self.token = token
         self.path = path
+        path.mkdir(exist_ok=True)
         self.subpath = subpath
 
     def sync(self, ask_confirmation=False):
