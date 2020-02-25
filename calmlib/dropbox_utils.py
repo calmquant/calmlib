@@ -16,6 +16,10 @@ from calmlib.found_on_the_web import stopwatch
 logger = get_personal_logger(__name__)
 
 
+# todo: remove remaining prints. Where are they hiding? Something about timings of operations.
+#  Oh, I guess it's that stopwatch method
+
+
 def list_folder(dbx, folder, subfolder):
     """List a folder.
     Return a dict mapping unicode filenames to

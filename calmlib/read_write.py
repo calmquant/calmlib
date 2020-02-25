@@ -53,4 +53,4 @@ def load(path: Path):
 
 
 def get_token(path):
-    return Path(path).read_text()
+    return Path(path).read_text().strip()

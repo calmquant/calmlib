@@ -19,6 +19,7 @@ python-telegram-bot
 pandas-profiling
 django
 plotly
+dateparser
 
 oneline:
 

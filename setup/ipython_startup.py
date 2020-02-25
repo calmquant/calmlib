@@ -36,5 +36,10 @@ from calmlib import load, load_json, load_pickle, dump, dump_json, dump_pickle
 from calmlib import run_bg, run_cmd
 from calmlib import get_personal_logger
 
+# Make jupyter notebook display all output
+from IPython.core.interactiveshell import InteractiveShell
+
+InteractiveShell.ast_node_interactivity = "all"
+
 __all__ = [np, pd, sns, time, sys, os, math, Path, Timestamp, Timedelta, autocast_args, load, load_pickle, load_json,
            dump_pickle, dump_json, dump, run_cmd, run_bg, get_personal_logger, calmlib, get_git_root]
